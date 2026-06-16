@@ -107,6 +107,51 @@ final class QuotaRowView: NSView {
     }
 }
 
+final class SettingsDisclosureView: NSView {
+    var onClick: (() -> Void)?
+
+    private let label = NSTextField(labelWithString: "")
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 70, height: 22)
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+
+        translatesAutoresizingMaskIntoConstraints = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        setExpanded(false)
+
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 22),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func setExpanded(_ expanded: Bool) {
+        label.stringValue = expanded ? "设置 ▾" : "设置 ▸"
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
 final class QuotaPanelViewController: NSViewController {
     var onRefresh: (() -> Void)?
     var onLoginLaunchChange: ((Bool) -> Void)?
@@ -117,14 +162,14 @@ final class QuotaPanelViewController: NSViewController {
 
     private let panelWidth: CGFloat = 506
     private let collapsedHeight: CGFloat = 150
-    private let expandedHeight: CGFloat = 220
     private let fiveHourRow = QuotaRowView(title: "5小时")
     private let weeklyRow = QuotaRowView(title: "周限额")
     private let updatedLabel = NSTextField(labelWithString: "")
-    private let settingsButton = NSButton()
+    private let settingsDisclosureView = SettingsDisclosureView()
     private let loginLaunchCheckbox = NSButton()
     private let loginLaunchMessage = NSTextField(wrappingLabelWithString: "")
     private let openSettingsButton = NSButton()
+    private let loginLaunchMessageRow = NSStackView()
     private let settingsDetails = NSStackView()
     private var rootHeightConstraint: NSLayoutConstraint?
     private var settingsExpanded = false
@@ -152,17 +197,11 @@ final class QuotaPanelViewController: NSViewController {
         header.alignment = .centerY
         header.spacing = 8
 
-        settingsButton.title = "设置 ▸"
-        settingsButton.target = self
-        settingsButton.action = #selector(toggleSettings)
-        settingsButton.isBordered = false
-        settingsButton.alignment = .left
-        settingsButton.font = .systemFont(ofSize: 11, weight: .medium)
-        settingsButton.contentTintColor = .secondaryLabelColor
-        settingsButton.setButtonType(.momentaryChange)
-        settingsButton.translatesAutoresizingMaskIntoConstraints = false
+        settingsDisclosureView.onClick = { [weak self] in
+            self?.toggleSettings()
+        }
 
-        let footer = NSStackView(views: [settingsButton, NSView(), updatedLabel])
+        let footer = NSStackView(views: [settingsDisclosureView, NSView(), updatedLabel])
         footer.orientation = .horizontal
         footer.alignment = .centerY
         footer.spacing = 8
@@ -185,16 +224,19 @@ final class QuotaPanelViewController: NSViewController {
         openSettingsButton.controlSize = .small
         openSettingsButton.isHidden = true
 
-        let messageRow = NSStackView(views: [loginLaunchMessage, NSView(), openSettingsButton])
-        messageRow.orientation = .horizontal
-        messageRow.alignment = .centerY
-        messageRow.spacing = 8
+        loginLaunchMessageRow.orientation = .horizontal
+        loginLaunchMessageRow.alignment = .centerY
+        loginLaunchMessageRow.spacing = 8
+        loginLaunchMessageRow.addArrangedSubview(loginLaunchMessage)
+        loginLaunchMessageRow.addArrangedSubview(NSView())
+        loginLaunchMessageRow.addArrangedSubview(openSettingsButton)
+        loginLaunchMessageRow.isHidden = true
 
         settingsDetails.orientation = .vertical
         settingsDetails.alignment = .leading
         settingsDetails.spacing = 4
         settingsDetails.addArrangedSubview(loginLaunchCheckbox)
-        settingsDetails.addArrangedSubview(messageRow)
+        settingsDetails.addArrangedSubview(loginLaunchMessageRow)
         settingsDetails.isHidden = true
 
         let stack = NSStackView(
@@ -219,9 +261,8 @@ final class QuotaPanelViewController: NSViewController {
             fiveHourRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             weeklyRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            settingsButton.heightAnchor.constraint(equalToConstant: 22),
             settingsDetails.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            messageRow.widthAnchor.constraint(equalTo: settingsDetails.widthAnchor)
+            loginLaunchMessageRow.widthAnchor.constraint(equalTo: settingsDetails.widthAnchor)
         ])
 
         preferredContentSize = NSSize(width: panelWidth, height: collapsedHeight)
@@ -247,6 +288,7 @@ final class QuotaPanelViewController: NSViewController {
         loginLaunchCheckbox.isEnabled = true
         loginLaunchMessage.isHidden = true
         openSettingsButton.isHidden = true
+        loginLaunchMessageRow.isHidden = true
 
         switch loginLaunchState.systemState {
         case .disabled, .enabled:
@@ -255,13 +297,22 @@ final class QuotaPanelViewController: NSViewController {
             loginLaunchMessage.stringValue = "需要在系统设置的“登录项”中允许此应用。"
             loginLaunchMessage.isHidden = false
             openSettingsButton.isHidden = false
+            loginLaunchMessageRow.isHidden = false
         case .installRequired:
             loginLaunchCheckbox.isEnabled = false
             loginLaunchMessage.stringValue = "请先将应用拖入“应用程序”文件夹后重新打开。"
             loginLaunchMessage.isHidden = false
+            loginLaunchMessageRow.isHidden = false
         case let .failed(message):
             loginLaunchMessage.stringValue = message
             loginLaunchMessage.isHidden = false
+            loginLaunchMessageRow.isHidden = false
+        }
+
+        if settingsExpanded {
+            performWithoutAnimation {
+                applyPreferredPanelSize()
+            }
         }
     }
 
@@ -277,7 +328,7 @@ final class QuotaPanelViewController: NSViewController {
         onRefresh?()
     }
 
-    @objc private func toggleSettings() {
+    private func toggleSettings() {
         setSettingsExpanded(!settingsExpanded)
     }
 
@@ -294,19 +345,43 @@ final class QuotaPanelViewController: NSViewController {
     }
 
     private func setSettingsExpanded(_ expanded: Bool) {
-        settingsExpanded = expanded
-        settingsButton.title = expanded ? "设置 ▾" : "设置 ▸"
-        settingsDetails.isHidden = !expanded
-        if expanded {
-            onSettingsExpanded?()
+        performWithoutAnimation {
+            settingsExpanded = expanded
+            settingsDisclosureView.setExpanded(expanded)
+            settingsDetails.isHidden = !expanded
+            if expanded {
+                onSettingsExpanded?()
+            }
+            applyPreferredPanelSize()
         }
+    }
 
-        let size = NSSize(
-            width: panelWidth,
-            height: expanded ? expandedHeight : collapsedHeight
-        )
+    private func applyPreferredPanelSize() {
+        let size = preferredPanelSize()
         rootHeightConstraint?.constant = size.height
         preferredContentSize = size
         onPreferredContentSizeChange?(size)
+        view.layoutSubtreeIfNeeded()
+    }
+
+    private func preferredPanelSize() -> NSSize {
+        guard settingsExpanded else {
+            return NSSize(width: panelWidth, height: collapsedHeight)
+        }
+
+        settingsDetails.layoutSubtreeIfNeeded()
+        let detailsHeight = ceil(settingsDetails.fittingSize.height)
+        return NSSize(
+            width: panelWidth,
+            height: max(collapsedHeight, collapsedHeight + detailsHeight + 6)
+        )
+    }
+
+    private func performWithoutAnimation(_ changes: () -> Void) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            changes()
+        }
     }
 }

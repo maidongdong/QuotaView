@@ -72,7 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.loginLaunchManager.refresh()
         }
         panelController.onPreferredContentSizeChange = { [weak self] size in
-            self?.popover.contentSize = size
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                context.allowsImplicitAnimation = false
+                self?.popover.contentSize = size
+            }
         }
         panelController.onQuit = {
             NSApp.terminate(nil)
