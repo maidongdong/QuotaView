@@ -1,4 +1,4 @@
-# Codex 额度栏 1.1.2
+# QuotaView 1.1.2
 
 原生 Swift/AppKit 菜单栏应用。它直接启动本机：
 
