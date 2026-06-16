@@ -124,7 +124,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.2"
+                        "version": "1.1.3"
                     ],
                     "capabilities": [
                         "experimentalApi": true
