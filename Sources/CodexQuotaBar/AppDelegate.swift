@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var client: CodexAppServerClient!
     private var state = QuotaDisplayState.loading
     private var clockTimer: Timer?
+    private var statusTitle = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -100,10 +101,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusTitle() {
         let fiveHour = state.fiveHour.map { "\($0.remainingPercent)%" } ?? "--"
         let weekly = state.weekly.map { "\($0.remainingPercent)%" } ?? "--"
-        statusItem.button?.title = "5h \(fiveHour)  周 \(weekly)"
+        let title = "5h \(fiveHour)  周 \(weekly)"
+        guard title != statusTitle else {
+            return
+        }
+        statusTitle = title
+        statusItem.button?.title = title
     }
 
     @objc private func clockTick() {
+        guard popover.isShown else {
+            return
+        }
         panelController.refreshClock(state: state)
     }
 

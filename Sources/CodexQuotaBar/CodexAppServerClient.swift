@@ -11,6 +11,8 @@ final class CodexAppServerClient {
 
     private var process: Process?
     private var inputHandle: FileHandle?
+    private var outputReadHandle: FileHandle?
+    private var errorReadHandle: FileHandle?
     private var outputBuffer = Data()
     private var pollTimer: DispatchSourceTimer?
     private var reconnectWorkItem: DispatchWorkItem?
@@ -18,6 +20,7 @@ final class CodexAppServerClient {
     private var stopped = false
     private var initialized = false
     private var nextRequestID = 2
+    private var reconnectDelay: TimeInterval = 3
     private var rateLimitRequestIDs = Set<Int>()
     private var requestTimeoutWorkItems = [Int: DispatchWorkItem]()
 
@@ -77,11 +80,16 @@ final class CodexAppServerClient {
         initialized = false
         clearPendingRateLimitRequests()
         inputHandle = inputPipe.fileHandleForWriting
+        outputReadHandle = outputPipe.fileHandleForReading
+        errorReadHandle = errorPipe.fileHandleForReading
         self.process = process
 
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else {
+                self?.queue.async {
+                    self?.handleOutputEOF(for: process, handle: handle)
+                }
                 return
             }
             self?.queue.async {
@@ -90,8 +98,17 @@ final class CodexAppServerClient {
         }
 
         // Drain stderr so verbose app-server logging cannot block the process.
-        errorPipe.fileHandleForReading.readabilityHandler = { handle in
-            _ = handle.availableData
+        errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                self?.queue.async {
+                    handle.readabilityHandler = nil
+                    if self?.process === process {
+                        self?.errorReadHandle = nil
+                    }
+                }
+                return
+            }
         }
 
         process.terminationHandler = { [weak self] _ in
@@ -99,19 +116,7 @@ final class CodexAppServerClient {
                 guard let self else {
                     return
                 }
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-                self.process = nil
-                self.inputHandle = nil
-                self.initialized = false
-                self.clearPendingRateLimitRequests()
-                self.pollTimer?.cancel()
-                self.pollTimer = nil
-
-                if !self.stopped {
-                    self.publishError("Codex app-server 已断开，正在重连…")
-                    self.scheduleReconnect()
-                }
+                self.handleProcessTerminated(process)
             }
         }
 
@@ -124,7 +129,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.3"
+                        "version": "1.1.4"
                     ],
                     "capabilities": [
                         "experimentalApi": true
@@ -133,6 +138,7 @@ final class CodexAppServerClient {
             )
         } catch {
             self.process = nil
+            clearProcessIOHandlers()
             inputHandle = nil
             publishError("无法启动 Codex app-server：\(error.localizedDescription)")
             scheduleReconnect()
@@ -145,6 +151,7 @@ final class CodexAppServerClient {
         }
 
         process.terminationHandler = nil
+        clearProcessIOHandlers()
         inputHandle?.closeFile()
         if process.isRunning {
             process.terminate()
@@ -165,17 +172,60 @@ final class CodexAppServerClient {
         startProcess()
     }
 
+    private func clearProcessIOHandlers() {
+        outputReadHandle?.readabilityHandler = nil
+        errorReadHandle?.readabilityHandler = nil
+        outputReadHandle = nil
+        errorReadHandle = nil
+    }
+
+    private func handleOutputEOF(for terminatedProcess: Process, handle: FileHandle) {
+        guard process === terminatedProcess else {
+            handle.readabilityHandler = nil
+            return
+        }
+
+        handle.readabilityHandler = nil
+        outputReadHandle = nil
+        handleProcessTerminated(terminatedProcess)
+    }
+
+    private func handleProcessTerminated(_ terminatedProcess: Process) {
+        guard process === terminatedProcess else {
+            terminatedProcess.terminationHandler = nil
+            return
+        }
+
+        terminatedProcess.terminationHandler = nil
+        clearProcessIOHandlers()
+        inputHandle?.closeFile()
+        outputBuffer.removeAll(keepingCapacity: true)
+        process = nil
+        inputHandle = nil
+        initialized = false
+        clearPendingRateLimitRequests()
+        pollTimer?.cancel()
+        pollTimer = nil
+
+        if !stopped {
+            publishError("Codex app-server 已断开，正在重连…")
+            scheduleReconnect()
+        }
+    }
+
     private func scheduleReconnect() {
         guard !stopped else {
             return
         }
 
+        let delay = reconnectDelay
+        reconnectDelay = min(reconnectDelay * 2, 60)
         reconnectWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             self?.startProcess()
         }
         reconnectWorkItem = workItem
-        queue.asyncAfter(deadline: .now() + 3, execute: workItem)
+        queue.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func startPolling() {
@@ -191,6 +241,9 @@ final class CodexAppServerClient {
 
     private func requestRateLimits() {
         guard initialized else {
+            return
+        }
+        guard rateLimitRequestIDs.isEmpty else {
             return
         }
 
@@ -249,6 +302,7 @@ final class CodexAppServerClient {
         if let id = message["id"] as? Int {
             if id == 1, message["result"] != nil {
                 initialized = true
+                reconnectDelay = 3
                 sendNotification(method: "initialized")
                 requestRateLimits()
                 startPolling()
