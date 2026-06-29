@@ -3,6 +3,12 @@ import Foundation
 final class CodexAppServerClient {
     typealias StateHandler = (QuotaDisplayState) -> Void
 
+    private enum FailureMode {
+        case none
+        case recoverable
+        case authentication
+    }
+
     private let executableURL = URL(
         fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex"
     )
@@ -21,6 +27,7 @@ final class CodexAppServerClient {
     private var initialized = false
     private var nextRequestID = 2
     private var reconnectDelay: TimeInterval = 3
+    private var failureMode = FailureMode.none
     private var rateLimitRequestIDs = Set<Int>()
     private var requestTimeoutWorkItems = [Int: DispatchWorkItem]()
 
@@ -50,8 +57,16 @@ final class CodexAppServerClient {
 
     func refresh() {
         queue.async {
-            self.requestRateLimits()
+            if self.shouldForceRestartOnRefresh {
+                self.restartProcess(status: "正在重新连接 Codex…")
+            } else {
+                self.requestRateLimits()
+            }
         }
+    }
+
+    private var shouldForceRestartOnRefresh: Bool {
+        failureMode != .none || !initialized || process == nil
     }
 
     private func startProcess() {
@@ -60,7 +75,7 @@ final class CodexAppServerClient {
         }
 
         guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
-            publishError("未找到 Codex app-server")
+            publishError("未找到 Codex app-server", mode: .recoverable)
             scheduleReconnect()
             return
         }
@@ -129,7 +144,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.4"
+                        "version": "1.1.5"
                     ],
                     "capabilities": [
                         "experimentalApi": true
@@ -140,7 +155,7 @@ final class CodexAppServerClient {
             self.process = nil
             clearProcessIOHandlers()
             inputHandle = nil
-            publishError("无法启动 Codex app-server：\(error.localizedDescription)")
+            publishError("无法启动 Codex app-server：\(error.localizedDescription)", mode: .recoverable)
             scheduleReconnect()
         }
     }
@@ -208,7 +223,7 @@ final class CodexAppServerClient {
         pollTimer = nil
 
         if !stopped {
-            publishError("Codex app-server 已断开，正在重连…")
+            publishError("Codex app-server 已断开，正在重连…", mode: .recoverable)
             scheduleReconnect()
         }
     }
@@ -270,6 +285,7 @@ final class CodexAppServerClient {
         }
 
         requestTimeoutWorkItems.removeValue(forKey: id)
+        failureMode = .recoverable
         restartProcess(status: "读取额度超时，正在重连…")
     }
 
@@ -303,6 +319,7 @@ final class CodexAppServerClient {
             if id == 1, message["result"] != nil {
                 initialized = true
                 reconnectDelay = 3
+                failureMode = .none
                 sendNotification(method: "initialized")
                 requestRateLimits()
                 startPolling()
@@ -314,8 +331,7 @@ final class CodexAppServerClient {
                 if let result = message["result"] {
                     decodeAndPublish(result)
                 } else if let error = message["error"] as? [String: Any] {
-                    let detail = error["message"] as? String ?? "未知错误"
-                    publishError("读取额度失败：\(detail)")
+                    publishRateLimitError(error)
                 }
                 return
             }
@@ -352,11 +368,48 @@ final class CodexAppServerClient {
         guard JSONSerialization.isValidJSONObject(object),
               let data = try? JSONSerialization.data(withJSONObject: object),
               let result = try? JSONDecoder().decode(RateLimitsResult.self, from: data) else {
-            publishError("Codex 返回了无法识别的额度数据")
+            publishError("Codex 返回了无法识别的额度数据", mode: .recoverable)
             return
         }
 
+        failureMode = .none
         publish(QuotaDisplayState(snapshot: result.rateLimits))
+    }
+
+    private func publishRateLimitError(_ error: [String: Any]) {
+        let detail = errorMessage(from: error)
+        let mode: FailureMode = isAuthenticationError(error) ? .authentication : .recoverable
+        publishError("读取额度失败：\(detail)", mode: mode)
+    }
+
+    private func errorMessage(from error: [String: Any]) -> String {
+        if isAuthenticationError(error) {
+            return "Codex 登录已失效，请打开 Codex App 重新登录"
+        }
+
+        guard let message = error["message"] as? String,
+              !message.isEmpty else {
+            return "未知错误"
+        }
+
+        let singleLine = message
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+        if singleLine.count <= 40 {
+            return singleLine
+        }
+        return String(singleLine.prefix(40)) + "…"
+    }
+
+    private func isAuthenticationError(_ error: [String: Any]) -> Bool {
+        if (error["status"] as? Int) == 401 {
+            return true
+        }
+
+        let message = error["message"] as? String ?? ""
+        return message.contains("token_invalidated")
+            || message.localizedCaseInsensitiveContains("authentication")
+            || message.localizedCaseInsensitiveContains("authentic")
     }
 
     private func send(id: Int, method: String, params: Any?) {
@@ -385,11 +438,12 @@ final class CodexAppServerClient {
         do {
             try inputHandle.write(contentsOf: data)
         } catch {
-            publishError("向 Codex app-server 发送请求失败")
+            publishError("向 Codex app-server 发送请求失败", mode: .recoverable)
         }
     }
 
-    private func publishError(_ message: String) {
+    private func publishError(_ message: String, mode: FailureMode) {
+        failureMode = mode
         publish(.pending(message))
     }
 

@@ -14,6 +14,7 @@ DMG_ROOT="$STAGE_DIR/dmg-root"
 MOUNT_DIR="$STAGE_DIR/mount"
 ICONSET_DIR="$STAGE_DIR/AppIcon.iconset"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon-1024.png"
+ICON_RESOURCE="$ROOT_DIR/Resources/AppIcon.icns"
 ICON_FILE="$STAGE_DIR/AppIcon.icns"
 CONTENTS_DIR="$APP_DIR/Contents"
 MOUNTED=0
@@ -27,11 +28,15 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$ROOT_DIR"
-swift build -c release
+if [[ "${SKIP_SWIFT_BUILD:-0}" != "1" ]]; then
+    swift build -c release
+fi
+[[ -x ".build/release/CodexQuotaBar" ]]
 
 [[ -f "$ICON_SOURCE" ]]
 [[ "$(sips -g pixelWidth "$ICON_SOURCE" | awk '/pixelWidth/ { print $2 }')" == "1024" ]]
 [[ "$(sips -g pixelHeight "$ICON_SOURCE" | awk '/pixelHeight/ { print $2 }')" == "1024" ]]
+[[ -s "$ICON_RESOURCE" ]]
 
 mkdir -p \
     "$CONTENTS_DIR/MacOS" \
@@ -40,14 +45,7 @@ mkdir -p \
     "$MOUNT_DIR" \
     "$ICONSET_DIR"
 
-for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$ICON_SOURCE" \
-        --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
-    double_size=$((size * 2))
-    sips -z "$double_size" "$double_size" "$ICON_SOURCE" \
-        --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
+cp "$ICON_RESOURCE" "$ICON_FILE"
 
 cp ".build/release/CodexQuotaBar" "$CONTENTS_DIR/MacOS/CodexQuotaBar"
 cp "Resources/Info.plist" "$CONTENTS_DIR/Info.plist"

@@ -1,4 +1,4 @@
-# QuotaView 1.1.4
+# QuotaView 1.1.5
 
 原生 Swift/AppKit 菜单栏应用。它直接启动本机：
 
