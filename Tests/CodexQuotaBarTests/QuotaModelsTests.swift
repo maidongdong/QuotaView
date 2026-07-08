@@ -78,4 +78,90 @@ final class QuotaModelsTests: XCTestCase {
         XCTAssertNil(state.updatedAt)
         XCTAssertEqual(state.status, "账号已切换，正在刷新额度…")
     }
+
+    func testDetectsSuspiciousZeroUsageInSameResetWindow() throws {
+        let previous = try JSONDecoder().decode(
+            RateLimitSnapshot.self,
+            from: Data(
+                """
+                {
+                  "primary": {
+                    "usedPercent": 18,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1781179384
+                  },
+                  "secondary": {
+                    "usedPercent": 29,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
+                }
+                """.utf8
+            )
+        )
+        let current = try JSONDecoder().decode(
+            RateLimitSnapshot.self,
+            from: Data(
+                """
+                {
+                  "primary": {
+                    "usedPercent": 0,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1781179384
+                  },
+                  "secondary": {
+                    "usedPercent": 29,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertTrue(current.hasSuspiciousZeroUsage(comparedTo: previous))
+    }
+
+    func testAllowsZeroUsageAfterResetWindowChanges() throws {
+        let previous = try JSONDecoder().decode(
+            RateLimitSnapshot.self,
+            from: Data(
+                """
+                {
+                  "primary": {
+                    "usedPercent": 18,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1781179384
+                  },
+                  "secondary": {
+                    "usedPercent": 29,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
+                }
+                """.utf8
+            )
+        )
+        let current = try JSONDecoder().decode(
+            RateLimitSnapshot.self,
+            from: Data(
+                """
+                {
+                  "primary": {
+                    "usedPercent": 0,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1781190000
+                  },
+                  "secondary": {
+                    "usedPercent": 29,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertFalse(current.hasSuspiciousZeroUsage(comparedTo: previous))
+    }
 }

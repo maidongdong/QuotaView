@@ -27,6 +27,31 @@ struct RateLimitSnapshot: Decodable {
             .compactMap { $0 }
             .first { $0.windowDurationMins == duration }
     }
+
+    var hasZeroUsageWindow: Bool {
+        [fiveHour, weekly]
+            .compactMap { $0 }
+            .contains { $0.usedPercent == 0 }
+    }
+
+    func hasSuspiciousZeroUsage(comparedTo previous: RateLimitSnapshot?) -> Bool {
+        hasSuspiciousZeroUsage(current: fiveHour, previous: previous?.fiveHour)
+            || hasSuspiciousZeroUsage(current: weekly, previous: previous?.weekly)
+    }
+
+    private func hasSuspiciousZeroUsage(
+        current: RateLimitWindow?,
+        previous: RateLimitWindow?
+    ) -> Bool {
+        guard let current,
+              current.usedPercent == 0,
+              let previous,
+              previous.usedPercent > 0 else {
+            return false
+        }
+
+        return current.resetsAt == previous.resetsAt
+    }
 }
 
 struct RateLimitsResult: Decodable {

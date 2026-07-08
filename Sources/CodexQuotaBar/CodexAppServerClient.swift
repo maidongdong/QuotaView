@@ -28,6 +28,9 @@ final class CodexAppServerClient {
     private var nextRequestID = 2
     private var reconnectDelay: TimeInterval = 3
     private var failureMode = FailureMode.none
+    private var lastPublishedSnapshot: RateLimitSnapshot?
+    private var firstZeroSnapshotConfirmed = false
+    private var zeroSnapshotConfirmationWorkItem: DispatchWorkItem?
     private var rateLimitRequestIDs = Set<Int>()
     private var requestTimeoutWorkItems = [Int: DispatchWorkItem]()
 
@@ -49,6 +52,8 @@ final class CodexAppServerClient {
             self.reconnectWorkItem = nil
             self.accountChangeWorkItem?.cancel()
             self.accountChangeWorkItem = nil
+            self.zeroSnapshotConfirmationWorkItem?.cancel()
+            self.zeroSnapshotConfirmationWorkItem = nil
             self.pollTimer?.cancel()
             self.pollTimer = nil
             self.closeProcess()
@@ -144,7 +149,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.5"
+                        "version": "1.1.6"
                     ],
                     "capabilities": [
                         "experimentalApi": true
@@ -295,6 +300,8 @@ final class CodexAppServerClient {
         }
         requestTimeoutWorkItems.removeAll()
         rateLimitRequestIDs.removeAll()
+        zeroSnapshotConfirmationWorkItem?.cancel()
+        zeroSnapshotConfirmationWorkItem = nil
     }
 
     private func consume(_ data: Data) {
@@ -355,6 +362,8 @@ final class CodexAppServerClient {
 
     private func handleAccountChanged() {
         accountChangeWorkItem?.cancel()
+        lastPublishedSnapshot = nil
+        firstZeroSnapshotConfirmed = false
         publish(.pending("账号已切换，正在刷新额度…"))
 
         let workItem = DispatchWorkItem { [weak self] in
@@ -372,8 +381,39 @@ final class CodexAppServerClient {
             return
         }
 
+        let snapshot = result.rateLimits
+        if shouldConfirmBeforePublishing(snapshot) {
+            scheduleZeroSnapshotConfirmation()
+            return
+        }
+
         failureMode = .none
-        publish(QuotaDisplayState(snapshot: result.rateLimits))
+        lastPublishedSnapshot = snapshot
+        publish(QuotaDisplayState(snapshot: snapshot))
+    }
+
+    private func shouldConfirmBeforePublishing(_ snapshot: RateLimitSnapshot) -> Bool {
+        if snapshot.hasSuspiciousZeroUsage(comparedTo: lastPublishedSnapshot) {
+            return true
+        }
+
+        if lastPublishedSnapshot == nil,
+           snapshot.hasZeroUsageWindow,
+           !firstZeroSnapshotConfirmed {
+            firstZeroSnapshotConfirmed = true
+            return true
+        }
+
+        return false
+    }
+
+    private func scheduleZeroSnapshotConfirmation() {
+        zeroSnapshotConfirmationWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.requestRateLimits()
+        }
+        zeroSnapshotConfirmationWorkItem = workItem
+        queue.asyncAfter(deadline: .now() + 2, execute: workItem)
     }
 
     private func publishRateLimitError(_ error: [String: Any]) {

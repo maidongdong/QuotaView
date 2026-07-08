@@ -90,6 +90,7 @@ MOUNTED=0
 rm -rf "$OUTPUT_APP"
 cp -R "$APP_DIR" "$OUTPUT_APP"
 xattr -cr "$OUTPUT_APP"
+codesign --force --deep --sign - "$OUTPUT_APP"
 codesign --verify --deep --strict "$OUTPUT_APP"
 cp "$STAGE_ZIP" "$OUTPUT_ZIP"
 cp "$STAGE_DMG" "$OUTPUT_DMG"
