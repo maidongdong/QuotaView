@@ -9,9 +9,10 @@ final class CodexAppServerClient {
         case authentication
     }
 
-    private let executableURL = URL(
-        fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex"
-    )
+    private let executableCandidates = [
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "/Applications/Codex.app/Contents/Resources/codex"
+    ]
     private let queue = DispatchQueue(label: "com.maidongdong.CodexQuotaBar.app-server")
     private let onState: StateHandler
 
@@ -79,7 +80,7 @@ final class CodexAppServerClient {
             return
         }
 
-        guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
+        guard let executableURL = resolveExecutableURL() else {
             publishError("未找到 Codex app-server", mode: .recoverable)
             scheduleReconnect()
             return
@@ -149,7 +150,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.6"
+                        "version": "1.1.7"
                     ],
                     "capabilities": [
                         "experimentalApi": true
@@ -163,6 +164,13 @@ final class CodexAppServerClient {
             publishError("无法启动 Codex app-server：\(error.localizedDescription)", mode: .recoverable)
             scheduleReconnect()
         }
+    }
+
+    private func resolveExecutableURL() -> URL? {
+        for path in executableCandidates where FileManager.default.isExecutableFile(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        return nil
     }
 
     private func closeProcess() {
