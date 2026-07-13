@@ -161,8 +161,7 @@ final class QuotaPanelViewController: NSViewController {
     var onQuit: (() -> Void)?
 
     private let panelWidth: CGFloat = 506
-    private let collapsedHeight: CGFloat = 150
-    private let fiveHourRow = QuotaRowView(title: "5小时")
+    private let collapsedHeight: CGFloat = 120
     private let weeklyRow = QuotaRowView(title: "周限额")
     private let updatedLabel = NSTextField(labelWithString: "")
     private let settingsDisclosureView = SettingsDisclosureView()
@@ -240,7 +239,7 @@ final class QuotaPanelViewController: NSViewController {
         settingsDetails.isHidden = true
 
         let stack = NSStackView(
-            views: [header, fiveHourRow, weeklyRow, footer, settingsDetails]
+            views: [header, weeklyRow, footer, settingsDetails]
         )
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical
@@ -258,7 +257,6 @@ final class QuotaPanelViewController: NSViewController {
             stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
             stack.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            fiveHourRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             weeklyRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
             settingsDetails.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -272,7 +270,6 @@ final class QuotaPanelViewController: NSViewController {
     func update(state: QuotaDisplayState) {
         _ = view
         let placeholder = state.status.isEmpty ? "等待数据…" : state.status
-        fiveHourRow.update(window: state.fiveHour, placeholder: placeholder)
         weeklyRow.update(window: state.weekly, placeholder: placeholder)
         updatedLabel.stringValue = QuotaText.updatedTime(state.updatedAt)
     }

@@ -1,4 +1,4 @@
-# QuotaView 1.1.7
+# QuotaView 1.1.8
 
 原生 Swift/AppKit 菜单栏应用。它直接启动本机 Codex app-server。新版 Codex 内置在 ChatGPT.app 中，旧版 Codex.app 仍保留兼容：
 
@@ -7,7 +7,7 @@
 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://
 ```
 
-通过 JSON-RPC 调用 `account/rateLimits/read`，显示 5 小时和周额度的剩余百分比及重置时间。剩余额度按 `100 - usedPercent` 计算。
+通过 JSON-RPC 调用 `account/rateLimits/read`，显示周额度的剩余百分比及重置时间。剩余额度按 `100 - usedPercent` 计算。
 
 ## 构建
 
@@ -31,6 +31,6 @@ open outputs/CodexQuotaBar.app
 
 ZIP 和 DMG 内的应用均在临时目录完成签名；直接放在文件同步目录中的 `.app` 可能被系统附加 `FinderInfo` 属性。
 
-应用常驻 macOS 顶部菜单栏，每 15 秒轮询一次，并监听 `account/rateLimits/updated`、`account/updated` 和 `account/login/completed`，在额度或账号变化后立即刷新。点击菜单栏额度可查看两行分段电量条、剩余百分比和重置时间。
+应用常驻 macOS 顶部菜单栏，每 15 秒轮询一次，并监听 `account/rateLimits/updated`、`account/updated` 和 `account/login/completed`，在额度或账号变化后立即刷新。点击菜单栏额度可查看周额度分段电量条、剩余百分比和重置时间。
 
 弹窗底部的“设置”默认折叠。展开后可以开启或关闭“开机自动启动”。该选项默认开启，用户选择会被持久保存；从只读 DMG 直接运行时不会注册登录项，并会提示先完成安装。

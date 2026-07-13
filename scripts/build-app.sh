@@ -6,6 +6,7 @@ ROOT_DIR=${0:A:h:h}
 OUTPUT_APP="$ROOT_DIR/outputs/CodexQuotaBar.app"
 OUTPUT_ZIP="$ROOT_DIR/outputs/CodexQuotaBar.zip"
 OUTPUT_DMG="$ROOT_DIR/outputs/CodexQuotaBar.dmg"
+OUTPUT_DIR="$ROOT_DIR/outputs"
 STAGE_DIR=$(mktemp -d /private/tmp/CodexQuotaBar.XXXXXX)
 APP_DIR="$STAGE_DIR/CodexQuotaBar.app"
 STAGE_ZIP="$STAGE_DIR/CodexQuotaBar.zip"
@@ -28,6 +29,7 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$ROOT_DIR"
+mkdir -p "$OUTPUT_DIR"
 if [[ "${SKIP_SWIFT_BUILD:-0}" != "1" ]]; then
     swift build -c release
 fi

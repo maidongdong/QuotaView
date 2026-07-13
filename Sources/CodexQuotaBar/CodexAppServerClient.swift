@@ -150,7 +150,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.7"
+                        "version": "1.1.8"
                     ],
                     "capabilities": [
                         "experimentalApi": true

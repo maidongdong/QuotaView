@@ -99,9 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatusTitle() {
-        let fiveHour = state.fiveHour.map { "\($0.remainingPercent)%" } ?? "--"
         let weekly = state.weekly.map { "\($0.remainingPercent)%" } ?? "--"
-        let title = "5h \(fiveHour)  周 \(weekly)"
+        let title = "周 \(weekly)"
         guard title != statusTitle else {
             return
         }

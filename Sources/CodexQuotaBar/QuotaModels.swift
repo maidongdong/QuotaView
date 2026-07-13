@@ -14,12 +14,8 @@ struct RateLimitSnapshot: Decodable {
     let primary: RateLimitWindow?
     let secondary: RateLimitWindow?
 
-    var fiveHour: RateLimitWindow? {
-        window(duration: 300) ?? primary
-    }
-
     var weekly: RateLimitWindow? {
-        window(duration: 10_080) ?? secondary
+        window(duration: 10_080) ?? primary ?? secondary
     }
 
     private func window(duration: Int) -> RateLimitWindow? {
@@ -29,14 +25,11 @@ struct RateLimitSnapshot: Decodable {
     }
 
     var hasZeroUsageWindow: Bool {
-        [fiveHour, weekly]
-            .compactMap { $0 }
-            .contains { $0.usedPercent == 0 }
+        weekly?.usedPercent == 0
     }
 
     func hasSuspiciousZeroUsage(comparedTo previous: RateLimitSnapshot?) -> Bool {
-        hasSuspiciousZeroUsage(current: fiveHour, previous: previous?.fiveHour)
-            || hasSuspiciousZeroUsage(current: weekly, previous: previous?.weekly)
+        hasSuspiciousZeroUsage(current: weekly, previous: previous?.weekly)
     }
 
     private func hasSuspiciousZeroUsage(
@@ -59,13 +52,11 @@ struct RateLimitsResult: Decodable {
 }
 
 struct QuotaDisplayState: Equatable {
-    var fiveHour: RateLimitWindow?
     var weekly: RateLimitWindow?
     var status: String
     var updatedAt: Date?
 
     static let loading = QuotaDisplayState(
-        fiveHour: nil,
         weekly: nil,
         status: "正在连接本机 Codex…",
         updatedAt: nil
@@ -73,7 +64,6 @@ struct QuotaDisplayState: Equatable {
 
     static func pending(_ status: String) -> QuotaDisplayState {
         QuotaDisplayState(
-            fiveHour: nil,
             weekly: nil,
             status: status,
             updatedAt: nil
@@ -81,19 +71,12 @@ struct QuotaDisplayState: Equatable {
     }
 
     init(snapshot: RateLimitSnapshot, updatedAt: Date = Date()) {
-        fiveHour = snapshot.fiveHour
         weekly = snapshot.weekly
         status = "已更新"
         self.updatedAt = updatedAt
     }
 
-    init(
-        fiveHour: RateLimitWindow?,
-        weekly: RateLimitWindow?,
-        status: String,
-        updatedAt: Date?
-    ) {
-        self.fiveHour = fiveHour
+    init(weekly: RateLimitWindow?, status: String, updatedAt: Date?) {
         self.weekly = weekly
         self.status = status
         self.updatedAt = updatedAt
