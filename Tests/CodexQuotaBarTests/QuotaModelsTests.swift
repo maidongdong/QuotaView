@@ -21,19 +21,20 @@ final class QuotaModelsTests: XCTestCase {
             from: Data(json.utf8)
         )
 
+        XCTAssertNil(result.rateLimits.fiveHour)
         XCTAssertEqual(result.rateLimits.weekly?.remainingPercent, 71)
     }
 
-    func testSelectsWeeklyWindowFromLegacyTwoWindowResponse() throws {
+    func testSelectsBothWindowsFromCurrentResponse() throws {
         let json = """
         {
           "primary": {
-            "usedPercent": 82,
+            "usedPercent": 6,
             "windowDurationMins": 300,
             "resetsAt": 1781179384
           },
           "secondary": {
-            "usedPercent": 29,
+            "usedPercent": 1,
             "windowDurationMins": 10080,
             "resetsAt": 1781748128
           }
@@ -45,7 +46,8 @@ final class QuotaModelsTests: XCTestCase {
             from: Data(json.utf8)
         )
 
-        XCTAssertEqual(snapshot.weekly?.remainingPercent, 71)
+        XCTAssertEqual(snapshot.fiveHour?.remainingPercent, 94)
+        XCTAssertEqual(snapshot.weekly?.remainingPercent, 99)
     }
 
     func testRemainingPercentIsClamped() {
@@ -72,10 +74,14 @@ final class QuotaModelsTests: XCTestCase {
         {
           "primary": {
             "usedPercent": 20,
-            "windowDurationMins": 10080,
+            "windowDurationMins": 300,
             "resetsAt": 1781179384
           },
-          "secondary": null
+          "secondary": {
+            "usedPercent": 30,
+            "windowDurationMins": 10080,
+            "resetsAt": 1781748128
+          }
         }
         """
 
@@ -86,13 +92,15 @@ final class QuotaModelsTests: XCTestCase {
         let state = QuotaDisplayState(snapshot: snapshot)
 
         XCTAssertEqual(state.status, "已更新")
-        XCTAssertEqual(state.weekly?.remainingPercent, 80)
+        XCTAssertEqual(state.fiveHour?.remainingPercent, 80)
+        XCTAssertEqual(state.weekly?.remainingPercent, 70)
         XCTAssertFalse(state.status.contains("app-server"))
     }
 
     func testPendingDisplayStateCarriesVisibleStatus() {
         let state = QuotaDisplayState.pending("账号已切换，正在刷新额度…")
 
+        XCTAssertNil(state.fiveHour)
         XCTAssertNil(state.weekly)
         XCTAssertNil(state.updatedAt)
         XCTAssertEqual(state.status, "账号已切换，正在刷新额度…")
@@ -106,10 +114,14 @@ final class QuotaModelsTests: XCTestCase {
                 {
                   "primary": {
                     "usedPercent": 29,
-                    "windowDurationMins": 10080,
+                    "windowDurationMins": 300,
                     "resetsAt": 1781179384
                   },
-                  "secondary": null
+                  "secondary": {
+                    "usedPercent": 17,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
                 }
                 """.utf8
             )
@@ -121,10 +133,14 @@ final class QuotaModelsTests: XCTestCase {
                 {
                   "primary": {
                     "usedPercent": 0,
-                    "windowDurationMins": 10080,
+                    "windowDurationMins": 300,
                     "resetsAt": 1781179384
                   },
-                  "secondary": null
+                  "secondary": {
+                    "usedPercent": 17,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
                 }
                 """.utf8
             )
@@ -141,10 +157,14 @@ final class QuotaModelsTests: XCTestCase {
                 {
                   "primary": {
                     "usedPercent": 29,
-                    "windowDurationMins": 10080,
+                    "windowDurationMins": 300,
                     "resetsAt": 1781179384
                   },
-                  "secondary": null
+                  "secondary": {
+                    "usedPercent": 17,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
                 }
                 """.utf8
             )
@@ -156,10 +176,14 @@ final class QuotaModelsTests: XCTestCase {
                 {
                   "primary": {
                     "usedPercent": 0,
-                    "windowDurationMins": 10080,
+                    "windowDurationMins": 300,
                     "resetsAt": 1781190000
                   },
-                  "secondary": null
+                  "secondary": {
+                    "usedPercent": 17,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1781748128
+                  }
                 }
                 """.utf8
             )
