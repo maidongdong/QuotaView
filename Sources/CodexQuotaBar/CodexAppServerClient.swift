@@ -26,6 +26,7 @@ final class CodexAppServerClient {
     private var accountChangeWorkItem: DispatchWorkItem?
     private var stopped = false
     private var initialized = false
+    private var awaitingInitialAccountUpdate = false
     private var nextRequestID = 2
     private var reconnectDelay: TimeInterval = 3
     private var failureMode = FailureMode.none
@@ -99,6 +100,7 @@ final class CodexAppServerClient {
 
         outputBuffer.removeAll(keepingCapacity: true)
         initialized = false
+        awaitingInitialAccountUpdate = true
         clearPendingRateLimitRequests()
         inputHandle = inputPipe.fileHandleForWriting
         outputReadHandle = outputPipe.fileHandleForReading
@@ -114,6 +116,9 @@ final class CodexAppServerClient {
                 return
             }
             self?.queue.async {
+                guard self?.process === process else {
+                    return
+                }
                 self?.consume(data)
             }
         }
@@ -150,7 +155,7 @@ final class CodexAppServerClient {
                     "clientInfo": [
                         "name": "CodexQuotaBar",
                         "title": "Codex 额度栏",
-                        "version": "1.1.9"
+                        "version": "1.1.10"
                     ],
                     "capabilities": [
                         "experimentalApi": true
@@ -361,7 +366,14 @@ final class CodexAppServerClient {
             // Rolling updates are sparse. Refetch the full snapshot to avoid
             // accidentally clearing fields omitted by the notification.
             requestRateLimits()
-        case "account/updated", "account/login/completed":
+        case "account/updated":
+            if awaitingInitialAccountUpdate {
+                awaitingInitialAccountUpdate = false
+                requestRateLimits()
+            } else {
+                handleAccountChanged()
+            }
+        case "account/login/completed":
             handleAccountChanged()
         default:
             break
@@ -372,7 +384,7 @@ final class CodexAppServerClient {
         accountChangeWorkItem?.cancel()
         lastPublishedSnapshot = nil
         firstZeroSnapshotConfirmed = false
-        publish(.pending("账号已切换，正在刷新额度…"))
+        publish(.pending("账号已切换，正在刷新额度…", preservesPreviousQuota: false))
 
         let workItem = DispatchWorkItem { [weak self] in
             self?.restartProcess(status: "账号已切换，正在刷新额度…")

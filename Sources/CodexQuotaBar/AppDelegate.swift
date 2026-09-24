@@ -93,8 +93,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(_ newState: QuotaDisplayState) {
-        state = newState
-        panelController.update(state: newState)
+        if newState.preservesPreviousQuota,
+           newState.fiveHour == nil,
+           newState.weekly == nil,
+           state.fiveHour != nil || state.weekly != nil {
+            state = QuotaDisplayState(
+                fiveHour: state.fiveHour,
+                weekly: state.weekly,
+                status: newState.status,
+                updatedAt: state.updatedAt,
+                preservesPreviousQuota: true
+            )
+        } else {
+            state = newState
+        }
+
+        panelController.update(state: state)
         updateStatusTitle()
     }
 

@@ -1,4 +1,4 @@
-# QuotaView 1.1.9
+# QuotaView 1.1.10
 
 原生 Swift/AppKit 菜单栏应用。它直接启动本机 Codex app-server。新版 Codex 内置在 ChatGPT.app 中，旧版 Codex.app 仍保留兼容：
 

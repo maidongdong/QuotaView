@@ -64,20 +64,26 @@ struct QuotaDisplayState: Equatable {
     var weekly: RateLimitWindow?
     var status: String
     var updatedAt: Date?
+    var preservesPreviousQuota: Bool
 
     static let loading = QuotaDisplayState(
         fiveHour: nil,
         weekly: nil,
         status: "正在连接本机 Codex…",
-        updatedAt: nil
+        updatedAt: nil,
+        preservesPreviousQuota: false
     )
 
-    static func pending(_ status: String) -> QuotaDisplayState {
+    static func pending(
+        _ status: String,
+        preservesPreviousQuota: Bool = true
+    ) -> QuotaDisplayState {
         QuotaDisplayState(
             fiveHour: nil,
             weekly: nil,
             status: status,
-            updatedAt: nil
+            updatedAt: nil,
+            preservesPreviousQuota: preservesPreviousQuota
         )
     }
 
@@ -86,18 +92,21 @@ struct QuotaDisplayState: Equatable {
         weekly = snapshot.weekly
         status = "已更新"
         self.updatedAt = updatedAt
+        preservesPreviousQuota = false
     }
 
     init(
         fiveHour: RateLimitWindow?,
         weekly: RateLimitWindow?,
         status: String,
-        updatedAt: Date?
+        updatedAt: Date?,
+        preservesPreviousQuota: Bool = false
     ) {
         self.fiveHour = fiveHour
         self.weekly = weekly
         self.status = status
         self.updatedAt = updatedAt
+        self.preservesPreviousQuota = preservesPreviousQuota
     }
 }
 
